@@ -1,6 +1,5 @@
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_neo4j import Neo4jGraph, Neo4jVector
-from neo4j_graphrag.types import SearchType
+from langchain_neo4j import Neo4jGraph
 
 from configuration.config import *
 
@@ -8,20 +7,20 @@ class IndexUntil:
     def __init__(self):
 
         self.graph = Neo4jGraph(
-            url = NEO4J_CONFIG['url'],
+            url = NEO4J_CONFIG['uri'],
             username = NEO4J_CONFIG['auth'][0],
             password = NEO4J_CONFIG['auth'][1]
 
         )
         #
         self.embedding_model = HuggingFaceEmbeddings(
-            model_name=" BAAI/bge-base-zh-v1.5",
-            encode_kwage = {"normalize_embeddings": True},
+            model_name="C:\\Users\\Administrator\\PycharmProjects\\AI_medical_Assitant\\smart_medical\\pretrained\\bge-base-zh-v1.5",
+            encode_kwargs = {"normalize_embeddings": True},
         )
 
     # 创建全文索引,传入索引名称，节点标签，属性
     def create_fulltext_index(self,index_name,label,property):
-        cypher = f"""CREATE FULLTEXT INDEX {index_name} IF NOY EXISTS
+        cypher = f"""CREATE FULLTEXT INDEX {index_name} IF NOT EXISTS
          FOR (n:{label}) ON EACH [n.{property}]
         """
 
@@ -49,7 +48,7 @@ class IndexUntil:
         # 1.查询所有节点对应的属性值，作为模型的输入，还需要查出节点ID
         cypher = f"""
             MATCH (n:{label})
-            RETURN n.{sourcec_property} AS text, id(n) as id
+            RETURN n.{sourcec_property} AS text, elementId(n) as id
         """
         results = self.graph.query(cypher)
         # 2.获取查询结果中的文本内容和ID
@@ -60,15 +59,15 @@ class IndexUntil:
 
         # 4.将ID和嵌入向量组合成字典形式
         batch = []
-        for id, embedding in zip(results, embeddings):
-            item = {"id":results["id"],"embedding":embedding}
+        for result, embedding in zip(results, embeddings):
+            item = {"id":result['id'],"embedding":embedding}
             batch.append(item)
 
         # 5.执行cypher,按照ID查询节点，写入新的向量属性
         cypher = f"""
             UNWIND $batch AS item
             MATCH (n:{label})
-            WHERE id(n) = item.id
+            WHERE elementId(n) = item.id
             SET n.{embedding_property} = item.embedding 
         """
         self.graph.query(cypher,params={'batch':batch})
@@ -95,36 +94,37 @@ if __name__ == "__main__":
 
     index.create_fulltext_index("disease_name_fulltext_index","Disease","name")
     index.create_vector_index("disease_name_vector_index","Disease","name","embedding")
-
+    print("疾病相关索引创建成功")
     index.create_fulltext_index("department_fulltext_index","Department","name")
     index.create_vector_index("department_vector_index","Department","name","embedding")
-
+    print("科室相关索引创建成功")
     index.create_fulltext_index("Symptom_fulltext_index","Symptom","name")
     index.create_vector_index("Symptom_vector_index","Symptom","name","embedding")
-
+    print("症状相关索引创建成功")
     index.create_fulltext_index("cause_fulltext_index","Cause","decs")
     index.create_vector_index("cause_desc_vector_index","Cause","desc","embedding")
-
+    print("诱因相关索引创建成功")
     index.create_fulltext_index("drug_fulltext_index","Drug","name")
     index.create_vector_index("drug_vector_index","Drug","name","embedding")
-
+    print("药物相关索引创建成功")
     index.create_fulltext_index("food_fulltext_index","Food","name")
     index.create_vector_index("food_vector_index","Food","name","embedding")
-
+    print("食物相关索引创建成功")
     index.create_fulltext_index("way_fulltext_index","Way","name")
     index.create_vector_index("way_vector_index","Way","name","embedding")
-
+    print("传播途径相关索引创建成功")
     index.create_fulltext_index("prevent_fulltext_index","Prevent","desc")
     index.create_vector_index("prevent_vector_index","Prevent","desc","embedding")
-
+    print("预防措施相关索引创建成功")
     index.create_fulltext_index("check_fulltext_index","Check","name")
     index.create_vector_index("check_vector_index","Check","name","embedding")
-
+    print("医学检查相关索引创建成功")
     index.create_fulltext_index("treat_fulltext_index","Treat","name")
     index.create_vector_index("treat_vector_index","Treat","name","embedding")
-
+    print("治疗方式相关索引创建成功")
     index.create_fulltext_index("people_fulltext_index","People","name")
     index.create_vector_index("people_vector_index","People","name","embedding")
-
+    print("人群类别相关索引创建成功")
     index.create_fulltext_index("duration_fulltext_index","Duration","name")
     index.create_vector_index("duration_vector_index","Duration","name","embedding")
+    print("治疗周期相关索引创建成功")

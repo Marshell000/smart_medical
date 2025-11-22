@@ -12,25 +12,24 @@ from configuration import config
 class ChatService:
     def __init__(self):
         # LLM
-        self.llm = ChatDeepSeek(model="deepseek-chat", temperature=0.4, api_key=config.API_KEY)
+        self.llm = ChatDeepSeek(model_name="deepseek-chat", temperature=0.4, api_key=config.API_KEY)
 
         # Neo4j connections
         self.graph = Neo4jGraph(
             url=config.NEO4J_CONFIG['uri'],
-            username=config.NEO4J_CONFIG['user'],
-            password=config.NEO4J_CONFIG['password']
+            username=config.NEO4J_CONFIG['auth'][0],
+            password=config.NEO4J_CONFIG['auth'][1]
         )
 
         # Embeddings + Vector store for hybrid retrieval
         self.embeddings = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-small-zh-v1.5",
+            model_name="C:\\Users\\Administrator\\PycharmProjects\\AI_medical_Assitant\\smart_medical\\pretrained\\bge-base-zh-v1.5",
             encode_kwargs={"normalize_embeddings": True}
         )
 
         # 混合检索 hybird search
         self.vector_stores = {
             'Disease': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -40,7 +39,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Department': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -50,7 +48,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Symptom': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -60,7 +57,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Cause': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -70,7 +66,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Drug': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -80,7 +75,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Food': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -90,7 +84,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Way': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -100,7 +93,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Prevent': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -110,7 +102,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Check': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -120,7 +111,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Treat': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -130,7 +120,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'People': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -140,7 +129,6 @@ class ChatService:
                 search_type=SearchType.HYBRID
             ),
             'Duration': Neo4jVector.from_existing_index(
-                self.embeddings,
                 url=config.NEO4J_CONFIG['uri'],
                 username=config.NEO4J_CONFIG['auth'][0],
                 password=config.NEO4J_CONFIG['auth'][1],
@@ -154,10 +142,9 @@ class ChatService:
         self.json_parser = JsonOutputParser()
         self.str_parser = StrOutputParser()
 
-    def _generate_cypher(self, question: str, schema_info: str):
-        generate_cypher_prompt = PromptTemplate(
-            input_variables=["question", "schema_info"],
-            template="""
+    def _generate_cypher(self, question: str):
+        # 创建提示词
+        prompt = """
                 你是一个专业的Neo4j Cypher查询生成器。你的任务是根据用户问题生成一条Cypher查询语句，用于从知识图谱中获取回答用户问题所需的信息。
 
                 用户问题：{question}
@@ -178,13 +165,16 @@ class ChatService:
                     }}
                   ]
                 }}"""
-        ).format(schema_info=schema_info, question=question)
-        cypher = self.llm.invoke(generate_cypher_prompt)
-        cypher = self.json_parser.invoke(cypher)
-        return cypher
+        prompt = PromptTemplate.from_template(prompt)
+        prompt = prompt.format(question=question, schema_info=self.graph.schema)
+        # 得到模型输出
 
+        output = self.llm.invoke(prompt)
+        output = self.json_parser.invoke(output)
+        return output
+
+    # 实体对齐，获得对齐后是实体名称
     def _entity_align(self, entities_to_align: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """使用向量+关键词检索修正实体名称"""
         for node in entities_to_align:
             if node['label'] in self.vector_stores:
                 results = self.vector_stores[node['label']].similarity_search(node['entity'], k=1)
@@ -192,9 +182,11 @@ class ChatService:
                     node['entity'] = results[0].page_content
         return entities_to_align
 
-    def _execute_cypher(self, cypher: str, prams: Dict[str, str]) -> List[Dict[str, Any]]:
-        """执行 Cypher 查询并返回结果"""
-        results = self.graph.query(cypher, params=prams)
+    def _execute_cypher(self, cypher: str, aligned_entities: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        params = {aligned_entity['param_name']: aligned_entity['entity'] for aligned_entity in aligned_entities}
+        print(f"执行的Cypher语句: {cypher}")
+        print(f"查询参数: {params}")
+        results = self.graph.query(cypher, params=params)
         return results
 
     def _generate_final_answer(self, question: str, query_result: List[Dict[str, Any]]) -> str:
@@ -210,14 +202,21 @@ class ChatService:
             """).format(question=question, query_result=query_result)
         result = self.llm.invoke(prompt)
         return self.str_parser.invoke(result)
-    # 根据用户问题抽取实体，生成cypher
+    # 根据用户 问题抽取实体，生成cypher
     def chat(self, question: str):
-        cypher = self._generate_cypher(question, self.graph.schema)
+        cypher = self._generate_cypher(question)
         cypher_query = cypher['cypher_query']
         entities_to_align = cypher['entities_to_align']
+        print("对齐之前的实体名称",entities_to_align)
         entities = self._entity_align(entities_to_align)
-        params = {entity['param_name']: entity['entity'] for entity in entities}
-        print(cypher_query)
-        print(params)
-        query_result = self._execute_cypher(cypher_query, params)
-        return self._generate_final_answer(question, query_result)
+        print("对其之后的实体名称",entities)
+        query_result = self._execute_cypher(cypher_query, entities)
+        print("查询结果",query_result)
+        answer = self._generate_final_answer(question, query_result)
+        print("最终回答",answer)
+        return answer
+
+
+if __name__ == '__main__':
+    chat_service = ChatService()
+    chat_service.chat("我患有颈部开放性损伤和老年人泌尿系结石，这两种病对应的并发症有哪些？我应该吃那些食物？")
